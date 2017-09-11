@@ -12,7 +12,7 @@ def main(_):
     num_channels = FLAGS.num_channels
     num_classes = FLAGS.num_classes
     is_training = FLAGS.is_training
-    max_train_epoach = 100
+    max_train_epoach = 50
     learning_rate = 0.0001
 
     model = DeepContour(num_classes, num_channels, [], is_training, is_FCN = True, weights_path = 'D:\\Qian\\TestData\\Test_FCN\\Trained\\')
@@ -34,7 +34,7 @@ def main(_):
           model.train_model(sess, training_data, learning_rate, max_train_epoach, writer, 
             save_step = 10, saver = saver, save_model_path = FLAGS.save_model_path)
         else:
-          model.restore_trained_parameters(sess, saver, FLAGS.save_model_path, 'my-model-36000')
+          model.restore_trained_parameters(sess, saver, FLAGS.save_model_path, 'my-model-3400')
           test_data = data_image.TestImage(FLAGS.test_directory, 0, sample_mean = sess.run(sample_mean), num_channels = num_channels)
           model.test_model(sess, test_data, FLAGS.save_result_path)
 
@@ -46,25 +46,25 @@ if __name__ == '__main__':
   parser.add_argument(
       '--save_model_path',
       type=str,
-      default= 'D:\\Qian\\TestData\\Test_FCN\\Trained_FCN\\synthetic_400_training\\',
+      default= 'D:\\Qian\\TestData\\Test_FCN\\Trained_FCN\\subtract_mean\\',
       help='Directory for storing training data'
   )
   parser.add_argument(
       '--test_directory',
       type=str,
-      default = 'D:\\GoogleDrive_Qian\\Foram\\testing\\synthetic\\',
+      default = 'D:\\GoogleDrive_Qian\\Foram\\testing\\original\\',
       help='Directory for storing test data'
   )
   parser.add_argument(
       '--save_result_path',
       type=str,
-      default = 'D:\\Qian\\TestData\\Test_FCN\\FCN_result\\synthetic\\400\\',
+      default = 'D:\\Qian\\TestData\\Test_FCN\\FCN_result\\subtract_mean\\3\\',
       help='Directory for storing result'
   )
   parser.add_argument(
       '--train_dir',
       type=str,
-      default='D:\\GoogleDrive_Qian\\Foram\\Training\\CNN_sythetic\\',
+      default='D:\\GoogleDrive_Qian\\Foram\\Training\\CNN_Image\\',
       help='Directory for storing training data'
   )
   parser.add_argument(

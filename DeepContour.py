@@ -2,12 +2,13 @@ import numpy as np
 import argparse
 import sys, os
 import scipy.io
+import scipy.misc
 import data_image 
 
 import tensorflow as tf 
 
 class DeepContour(object):
-    def __init__(self, num_classes, num_channels, skip_layer, is_training, weights_path = 'DEFAULT', is_FCN = False):
+    def __init__(self, num_classes, num_channels, skip_layer, is_training, weights_path = 'DEFAULT'):
         """
         Inputs:
         - x: tf.placeholder, for the input images
@@ -21,7 +22,6 @@ class DeepContour(object):
         # self.KEEP_PROB = keep_prob
         self.SKIP_LAYER = skip_layer
         self.IS_TRAINING = is_training
-        self.IS_FCN = is_FCN
         self.NUM_CHANNELS = num_channels
 
         self.X = tf.placeholder(tf.float32, [None, None, None, num_channels])
@@ -37,10 +37,7 @@ class DeepContour(object):
         else:
             self.WEIGHTS_PATH = weights_path
 
-        if self.IS_FCN:
-            self.create_FCN()
-        else:
-            self.create()
+        self.create_FCN()
 
 
         if is_training:
@@ -49,26 +46,32 @@ class DeepContour(object):
             with tf.name_scope('loss'):
                 # loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                 #     (logits = tf.boolean_mask(self.dconv3, mask_),labels = tf.boolean_mask(y_, mask_)))
-                loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
+                loss_1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                     (logits = apply_mask(self.dconv3, mask_),labels = apply_mask(y_, mask_)))
-            tf.summary.scalar('loss', loss)
+                self.loss_2 = 0*tf.reduce_mean(tf.cast(self.prediction, tf.float32))
+                loss = loss_1 + self.loss_2
+            loss_summery = tf.summary.scalar('loss', loss)
                 
             with tf.name_scope('train'):
                 optimizer = tf.train.AdamOptimizer(learning_rate = self.LEARNING_RATE)
                 grads = optimizer.compute_gradients(loss)
                 self.train_step = optimizer.apply_gradients(grads)
                 # self.train_step = tf.train.AdamOptimizer(learning_rate = self.LEARNING_RATE).minimize(loss)
-            [tf.summary.histogram('gradient/' + var.name, grad) for grad, var in grads]
+            grad_summery = [tf.summary.histogram('gradient/' + var.name, grad) for grad, var in grads]
             
 
             with tf.name_scope('accuracy'):
                 # correct_prediction = tf.boolean_mask(tf.equal(self.prediction, y_), mask_)
                 correct_prediction = apply_mask(tf.equal(self.prediction, y_), mask_)
                 self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            tf.summary.scalar('accuracy', self.accuracy)
-            tf.summary.image("Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
+            train_accuracy_summery = tf.summary.scalar('train_accuracy', self.accuracy)
+            validation_accuracy_summery = tf.summary.scalar('validation_accuracy', self.accuracy)
+            train_predict_summery = tf.summary.image("train_Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
+            validation_predict_summery = tf.summary.image("validation_Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
 
-            self.merged_summary = tf.summary.merge_all()
+            self.train_summary = tf.summary.merge([loss_summery, grad_summery, train_accuracy_summery, train_predict_summery], name = 'train')
+            self.test_summary = tf.summary.merge([validation_accuracy_summery, validation_predict_summery], name = 'test')
+
 
 
     def create_FCN(self):
@@ -99,26 +102,6 @@ class DeepContour(object):
         self.dconv3 = dconv(dconv2, None, 16, 16, 'dconv3', 
             output_channels = self.NUM_CLASSES, output_shape = deconv3_shape, stride_x = 4, stride_y = 4)
         self.prediction = tf.argmax(self.dconv3, name="prediction", dimension = -1)
-
-    def create(self):
-        conv1 = conv(self.X, 5, 5, 32, 'conv1')
-        pool1 = max_pool(conv1, name = 'pool1')
-
-        conv2 = conv(pool1, 3, 3, 48, 'conv2')
-        pool2 = max_pool(conv2, name = 'pool2')
-
-        conv3 = conv(pool2, 3, 3, 64, 'conv3')
-        pool3 = max_pool(conv3, name = 'pool3')
-
-        conv4 = conv(pool3, 3, 3, 128, 'conv4')
-        pool4 = max_pool(conv4, name = 'pool4')
-        h_pool4_flat = tf.reshape(pool4, [-1, 2*2*128])
-
-        self.fc_feature, fc1 = fc(h_pool4_flat, 2*2*128, 128, 'fc1')
-        dropout_fc1 = dropout(fc1, self.KEEP_PROB)
-
-        self.fc2 = fc(dropout_fc1, 128, self.NUM_CLASSES, 'fc2', relu = False)[0]
-
 
 
     def restore_trained_parameters(self, session, saver, model_path, load_name):
@@ -151,21 +134,17 @@ class DeepContour(object):
     def train_model(self, session, training_data, learning_rate, max_epoach, writer,
         save_step = 100, saver = None, keep_prob = 0.5, save_model_path = ''):
         step = 0
-        while True:
-          if training_data.train.epochs_completed >= max_epoach:
-            break
+        while training_data.train.epochs_completed < max_epoach:
           step += 1
           print('Iteration: {}, Epoch: {}'.format(step, training_data.train.epochs_completed))
 
           cur_im, cur_label, cur_mask = training_data.train.next_image()
-          _, summary_all = session.run([self.train_step, self.merged_summary], feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
+          _, train_summary, test_loss = session.run([self.train_step, self.train_summary, self.loss_2], feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
             self.KEEP_PROB: keep_prob, self.LEARNING_RATE: learning_rate})
 
-          writer.add_summary(summary_all, step)
+          writer.add_summary(train_summary, step)
 
           if step % save_step == 0:
-            # s = sess.run(merged_summary, feed_dict={x:cur_im, y_: cur_label, mask_:cur_mask, keep_prob: 1.0})
-            # writer.add_summary(s, training_data.train.epochs_completed*100 + step)
             train_accuracy = session.run(self.accuracy, feed_dict={self.X: cur_im, self.Y_:cur_label, 
                 self.MASK_:cur_mask, self.KEEP_PROB: 1.0})
 
@@ -176,8 +155,11 @@ class DeepContour(object):
                 break
               test_im, test_label, test_mask = training_data.validate.next_image()
               test_cnt += 1
-              test_accuracy += session.run(self.accuracy, feed_dict={self.X: test_im, self.Y_:test_label, 
+              cur_accuracy, test_summary = session.run([self.accuracy, self.test_summary], feed_dict={self.X: test_im, self.Y_:test_label, 
                 self.MASK_:test_mask, self.KEEP_PROB: 1.0})
+              test_accuracy += cur_accuracy
+              writer.add_summary(test_summary, step)
+              
             test_accuracy /= test_cnt
             saver.save(session, save_model_path + 'my-model', global_step = step)
             print('step {}, training accuracy {}, testing accuracy {}'.format(step, train_accuracy, test_accuracy)) 
@@ -192,7 +174,8 @@ class DeepContour(object):
             break
           print(cur_image.shape)
           test_result = session.run(result, feed_dict={self.X: cur_image, self.KEEP_PROB: 1.0})
-          scipy.io.savemat(save_result_path + 'test_FCN_result_' + "%03d" % (cnt + 1) + '.mat', mdict = {'resultList': np.squeeze(test_result)})
+          save_images(np.squeeze(test_result)[:,:,1], save_result_path + 'test_FCN_result_' + "%03d" % (cnt + 1) + '.png')
+          # scipy.io.savemat(save_result_path + 'test_FCN_result_' + "%03d" % (cnt + 1) + '.mat', mdict = {'resultList': np.squeeze(test_result)})
           cnt += 1 
         print('Finish.')
 
@@ -263,6 +246,14 @@ def dropout(x, keep_prob):
 
 def apply_mask(input_matrix, mask):
     return tf.dynamic_partition(input_matrix, mask, 2)[1]
+
+def save_images(image, save_path):
+
+    # normalization of tanh output
+    
+    return scipy.misc.imsave(save_path, image)
+
+
 
 def change_parameter_for_FCN(session, load_path, load_name, save_path):
     weights_dict = {}
