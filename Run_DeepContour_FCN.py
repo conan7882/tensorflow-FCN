@@ -20,7 +20,7 @@ def main(_):
     if is_training:
       training_data = data_image.prepare_data_set(FLAGS.train_dir, 0.1, num_channels = num_channels)
       print(training_data.train.sample_mean)
-      merged_summary = tf.summary.merge_all()
+      
       writer = tf.summary.FileWriter(FLAGS.save_model_path)
     else:
       sample_mean = tf.Variable(np.empty(shape=[num_channels], dtype = float), name = 'sample_mean')
@@ -31,7 +31,7 @@ def main(_):
 
         if is_training:
           writer.add_graph(sess.graph)
-          model.train_model(sess, training_data, learning_rate, max_train_epoach, 
+          model.train_model(sess, training_data, learning_rate, max_train_epoach, writer, 
             save_step = 10, saver = saver, save_model_path = FLAGS.save_model_path)
         else:
           model.restore_trained_parameters(sess, saver, FLAGS.save_model_path, 'my-model-36000')

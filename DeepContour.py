@@ -51,16 +51,24 @@ class DeepContour(object):
                 #     (logits = tf.boolean_mask(self.dconv3, mask_),labels = tf.boolean_mask(y_, mask_)))
                 loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                     (logits = apply_mask(self.dconv3, mask_),labels = apply_mask(y_, mask_)))
+            tf.summary.scalar('loss', loss)
                 
             with tf.name_scope('train'):
-                self.train_step = tf.train.AdamOptimizer(learning_rate = self.LEARNING_RATE).minimize(loss)
-            # tf.summary.scalar('loss', loss)
+                optimizer = tf.train.AdamOptimizer(learning_rate = self.LEARNING_RATE)
+                grads = optimizer.compute_gradients(loss)
+                self.train_step = optimizer.apply_gradients(grads)
+                # self.train_step = tf.train.AdamOptimizer(learning_rate = self.LEARNING_RATE).minimize(loss)
+            [tf.summary.histogram('gradient/' + var.name, grad) for grad, var in grads]
+            
 
             with tf.name_scope('accuracy'):
                 # correct_prediction = tf.boolean_mask(tf.equal(self.prediction, y_), mask_)
                 correct_prediction = apply_mask(tf.equal(self.prediction, y_), mask_)
                 self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            # tf.summary.scalar('accuracy', accuracy)
+            tf.summary.scalar('accuracy', self.accuracy)
+            tf.summary.image("Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
+
+            self.merged_summary = tf.summary.merge_all()
 
 
     def create_FCN(self):
@@ -140,7 +148,7 @@ class DeepContour(object):
             print(layer_name + ' done.')
         print('Load all trained parameters done!')
 
-    def train_model(self, session, training_data, learning_rate, max_epoach, 
+    def train_model(self, session, training_data, learning_rate, max_epoach, writer,
         save_step = 100, saver = None, keep_prob = 0.5, save_model_path = ''):
         step = 0
         while True:
@@ -150,8 +158,10 @@ class DeepContour(object):
           print('Iteration: {}, Epoch: {}'.format(step, training_data.train.epochs_completed))
 
           cur_im, cur_label, cur_mask = training_data.train.next_image()
-          session.run(self.train_step, feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
+          _, summary_all = session.run([self.train_step, self.merged_summary], feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
             self.KEEP_PROB: keep_prob, self.LEARNING_RATE: learning_rate})
+
+          writer.add_summary(summary_all, step)
 
           if step % save_step == 0:
             # s = sess.run(merged_summary, feed_dict={x:cur_im, y_: cur_label, mask_:cur_mask, keep_prob: 1.0})
