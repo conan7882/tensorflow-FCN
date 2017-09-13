@@ -15,7 +15,7 @@ def main(_):
     max_train_epoach = 50
     learning_rate = 0.0001
 
-    model = DeepContour(num_classes, num_channels, [], is_training, is_FCN = True, weights_path = 'D:\\Qian\\TestData\\Test_FCN\\Trained\\')
+    model = DeepContour(num_classes, num_channels, [], is_training, weights_path = 'D:\\Qian\\TestData\\Test_FCN\\Trained\\')
 
     if is_training:
       training_data = data_image.prepare_data_set(FLAGS.train_dir, 0.1, num_channels = num_channels)
