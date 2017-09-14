@@ -12,7 +12,7 @@ def main(_):
     num_channels = FLAGS.num_channels
     num_classes = FLAGS.num_classes
     is_training = FLAGS.is_training
-    max_train_epoach = 50
+    max_train_epoach = 100
     learning_rate = 0.0001
 
     model = DeepContour(num_classes, num_channels, [], is_training, weights_path = 'D:\\Qian\\TestData\\Test_FCN\\Trained\\')
@@ -64,7 +64,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--train_dir',
       type=str,
-      default='D:\\GoogleDrive_Qian\\Foram\\Training\\CNN_Image\\',
+      default='D:\\Qian\\Dataset\\Segmentation\\BSR_bsds500\\BSR\\BSDS500\\data\\groundTruth\\train\\train\\',
       help='Directory for storing training data'
   )
   parser.add_argument(
@@ -76,7 +76,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--num_channels',
       type=int,
-      default=1,
+      default=3,
       help='Number of input channel'
   )
   parser.add_argument(

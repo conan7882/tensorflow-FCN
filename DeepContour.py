@@ -43,13 +43,14 @@ class DeepContour(object):
         if is_training:
             mask_ = self.MASK_
             y_ = self.Y_
+
+            # loss = self.get_loss('loss')
+            # loss = self.class_balanced_sigmoid_cross_entropy(logits = self.dconv3[:,:,:,1], label = self.Y_)
             with tf.name_scope('loss'):
                 # loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                 #     (logits = tf.boolean_mask(self.dconv3, mask_),labels = tf.boolean_mask(y_, mask_)))
-                loss_1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
+                loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                     (logits = apply_mask(self.dconv3, mask_),labels = apply_mask(y_, mask_)))
-                self.loss_2 = 0*tf.reduce_mean(tf.cast(self.prediction, tf.float32))
-                loss = loss_1 + self.loss_2
             loss_summery = tf.summary.scalar('loss', loss)
                 
             with tf.name_scope('train'):
@@ -67,12 +68,35 @@ class DeepContour(object):
             train_accuracy_summery = tf.summary.scalar('train_accuracy', self.accuracy)
             validation_accuracy_summery = tf.summary.scalar('validation_accuracy', self.accuracy)
             train_predict_summery = tf.summary.image("train_Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
+
+            # masked_label = tf.cast(tf.reshape(apply_mask(y_, mask_), [1,481, 321]), tf.float32)
+            # train_label_summery = tf.summary.image("train_Predict", tf.expand_dims(masked_label, -1))
+
             validation_predict_summery = tf.summary.image("validation_Predict", tf.expand_dims(tf.cast(self.prediction, tf.float32), -1))
 
             self.train_summary = tf.summary.merge([loss_summery, grad_summery, train_accuracy_summery, train_predict_summery], name = 'train')
             self.test_summary = tf.summary.merge([validation_accuracy_summery, validation_predict_summery], name = 'test')
 
+    def get_loss(self, name):
+        with tf.name_scope(name):
+            loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits = self.dconv3, labels = self.Y_))
+        return loss
 
+    def class_balanced_sigmoid_cross_entropy(self, logits, label, name='cross_entropy_loss'):
+
+        with tf.name_scope('class_balanced_sigmoid_cross_entropy'):
+            y = tf.cast(label, tf.float32)
+
+            count_neg = tf.reduce_sum(1. - y)
+            count_pos = tf.reduce_sum(y)
+            beta = count_neg / (count_neg + count_pos)
+
+            pos_weight = beta / (1 - beta)
+            cost = tf.nn.weighted_cross_entropy_with_logits(logits = logits, targets = y, pos_weight = pos_weight)
+            cost = tf.reduce_mean(cost * (1 - beta))
+            zero = tf.equal(count_pos, 0.0)
+        return tf.where(zero, 0.0, cost, name=name)
+        
 
     def create_FCN(self):
         conv1 = conv(self.X, 5, 5, 32, 'conv1')
@@ -139,7 +163,7 @@ class DeepContour(object):
           print('Iteration: {}, Epoch: {}'.format(step, training_data.train.epochs_completed))
 
           cur_im, cur_label, cur_mask = training_data.train.next_image()
-          _, train_summary, test_loss = session.run([self.train_step, self.train_summary, self.loss_2], feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
+          _, train_summary, test_prediction = session.run([self.train_step, self.train_summary, self.prediction], feed_dict={self.X: cur_im, self.Y_:cur_label, self.MASK_:cur_mask, 
             self.KEEP_PROB: keep_prob, self.LEARNING_RATE: learning_rate})
 
           writer.add_summary(train_summary, step)
@@ -184,10 +208,10 @@ def conv(x, filter_height, filter_width, num_filters, name, stride_x = 1, stride
     input_channel = int(x.shape[-1])
     convolve = lambda i, k: tf.nn.conv2d(i, k, strides=[1, stride_y, stride_x, 1], padding = padding)
     with tf.variable_scope(name) as scope:
-        # weights = tf.get_variable('weights', shape = [filter_height, filter_width, input_channel, num_filters])
-        # biases = tf.get_variable('biases', shape = [num_filters])
-        weights = tf.Variable(tf.random_normal([filter_height, filter_width, input_channel, num_filters], stddev=0.02), name='weights')
-        biases = tf.Variable(tf.random_normal([num_filters], stddev=0.02), name='biases')
+        weights = new_normal_variable('weights', shape = [filter_height, filter_width, input_channel, num_filters])
+        biases = new_normal_variable('biases', shape = [num_filters])
+        # weights = tf.Variable(tf.random_normal([filter_height, filter_width, input_channel, num_filters], stddev=0.02), name='weights')
+        # biases = tf.Variable(tf.random_normal([num_filters], stddev=0.02), name='biases')
 
         conv = convolve(x, weights)
         bias = tf.nn.bias_add(conv, biases)
@@ -207,10 +231,10 @@ def dconv(x, fuse_x, filter_height, filter_width, name, output_shape = [], outpu
         output_channels = int(fuse_x.shape[-1])
 
     with tf.variable_scope(name) as scope:
-        # weights = tf.get_variable('weights', shape = [filter_height, filter_width, output_channels, input_channels])
-        # biases = tf.get_variable('biases', shape = [output_channels])
-        weights = tf.Variable(tf.random_normal([filter_height, filter_width, output_channels, input_channels], stddev=0.02), name='weights')
-        biases = tf.Variable(tf.random_normal([output_channels], stddev=0.02), name='biases')
+        weights = new_normal_variable('weights', shape = [filter_height, filter_width, output_channels, input_channels])
+        biases = new_normal_variable('biases', shape = [output_channels])
+        # weights = tf.Variable(tf.random_normal([filter_height, filter_width, output_channels, input_channels], stddev=0.02), name='weights')
+        # biases = tf.Variable(tf.random_normal([output_channels], stddev=0.02), name='biases')
 
         dconv = tf.nn.conv2d_transpose(x, weights, output_shape = output_shape, strides=[1, stride_y, stride_x, 1], padding = padding, name = scope.name)
         bias = tf.nn.bias_add(dconv, biases)
@@ -223,10 +247,10 @@ def dconv(x, fuse_x, filter_height, filter_width, name, output_shape = [], outpu
 
 def fc(x, num_in, num_out, name, relu = True):
     with tf.variable_scope(name) as scope:
-        # weights = tf.get_variable('weights', shape = [num_in, num_out], trainable = True)
-        # biases = tf.get_variable('biases', shape = [num_out], trainable = True)
-        weights = tf.Variable(tf.random_normal([num_in, num_out], stddev=0.02), name='weights')
-        biases = tf.Variable(tf.random_normal([num_out], stddev=0.02), name='biases')
+        weights = new_normal_variable('weights', shape = [num_in, num_out], trainable = True)
+        biases = new_normal_variable('biases', shape = [num_out], trainable = True)
+        # weights = tf.Variable(tf.random_normal([num_in, num_out], stddev=0.02), name='weights')
+        # biases = tf.Variable(tf.random_normal([num_out], stddev=0.02), name='biases')
 
         act = tf.nn.xw_plus_b(x, weights, biases, name = scope.name)
 
@@ -246,6 +270,9 @@ def dropout(x, keep_prob):
 
 def apply_mask(input_matrix, mask):
     return tf.dynamic_partition(input_matrix, mask, 2)[1]
+
+def new_normal_variable(name, shape = None, trainable = True, stddev = 0.02):
+    return tf.get_variable(name, shape = shape, trainable = trainable, initializer = tf.random_normal_initializer(stddev = stddev))
 
 def save_images(image, save_path):
 

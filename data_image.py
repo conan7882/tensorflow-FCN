@@ -142,7 +142,7 @@ def prepare_data_set(file_path, valid_percentage, num_channels = 1, isSubstractM
 def load_training_image(file_path, num_channels = 1):
     # print('Loading training file ' + file_path)
     mat = scipy.io.loadmat(file_path)
-    image = mat['level1Edge'].astype('float')
+    image = mat['im'].astype('float')
     label = mat['GT']
     mask = mat['Mask']
     image = np.reshape(image, [1, image.shape[0], image.shape[1], num_channels])
@@ -163,7 +163,10 @@ def average_train_data(file_list, num_channels):
     for cur_file_path in file_list:
         image, label, mask = load_training_image(cur_file_path, num_channels = num_channels)
         for cur_channel in range(0, num_channels):
-            mean_list[cur_channel] += np.ma.masked_array(image[:,:,:, cur_channel], mask = mask).mean()
+            # masked_im = np.ma.masked_array(np.squeeze(image[:,:,:, cur_channel]), mask = np.squeeze(mask))
+            masked_im = image[:,:,:, cur_channel]
+            mean_list[cur_channel] += np.ma.mean(masked_im)
+            # print(np.squeeze(mask).shape)
     return mean_list/len(file_list)
 
 
