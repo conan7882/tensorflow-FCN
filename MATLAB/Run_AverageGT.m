@@ -3,7 +3,8 @@ close all
 %%
 datapath = 'D:\Qian\Dataset\Segmentation\BSR_bsds500\BSR\BSDS500\data\groundTruth\train\';
 impath = 'D:\Qian\Dataset\Segmentation\BSR_bsds500\BSR\BSDS500\data\images\train\';
-savepath = [datapath '\train\'];
+% savepath = [datapath '\train\'];
+savepath = 'D:\Qian\Dataset\Segmentation\BSR_bsds500\BSR\BSDS500\data\mask\train\';
 mkdir(savepath)
 file_list = ls([datapath '*.mat']);
 %%
@@ -26,8 +27,8 @@ for i = 1:length(file_list)
     negative_id = find(GT == 0);
     rand_id = randperm(length(negative_id));
     Mask(negative_id(rand_id(1:nnz(GT)))) = 1;
-    
-    save([savepath file_list(i,:)], 'im', 'GT', 'Mask');
+%     imwrite(uint8(Mask)*255, [savepath name, '.jpg'],'jpg');
+    save([savepath file_list(i,:)], 'Mask');
 %     figure(1);
 % subplot(2,2,1);imagesc(GT); axis equal; colormap gray
 % subplot(2,2,2);imagesc(sum(cur_gt,3)); axis equal; colormap gray
